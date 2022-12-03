@@ -13,3 +13,9 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+# no need to upload input data or session cookie :)
+*.txt
+# except for the template
+!cmd/template/input.txt
+!cmd/template/session.txt
