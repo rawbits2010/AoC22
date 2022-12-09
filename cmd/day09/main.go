@@ -16,7 +16,7 @@ func main() {
 	defer outputhandler.Reset()
 
 	fieldColor = outputhandler.GetForeground(outputhandler.Gray)
-	tailMarkColor = outputhandler.GetForeground(outputhandler.BrightGreen)
+	tailMarkColor = outputhandler.GetForeground(outputhandler.Cyan)
 	bridgeColor = outputhandler.GetForeground(outputhandler.BrightGreen)
 	startColor = outputhandler.GetColor(outputhandler.White, outputhandler.BrightRed)
 
@@ -59,7 +59,7 @@ func simulate(lines []string, knots int) (int, error) {
 			return 0, fmt.Errorf("invalid steps '%s' in line '%s'", tokens[1], line)
 		}
 
-		for i := 1; i <= steps; i++ {
+		for currStep := 1; currStep <= steps; currStep++ {
 
 			switch direction {
 			case "L":
@@ -79,7 +79,9 @@ func simulate(lines []string, knots int) (int, error) {
 
 			}
 
-			//VisualizeBridge(bridge.Knots)
+			//if lineIdx == 1 && currStep >= 3 && currStep <= 5 {
+			//	VisualizeKnots(bridge.Knots)
+			//}
 		}
 	}
 

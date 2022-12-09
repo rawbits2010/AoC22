@@ -12,6 +12,30 @@ var tailMarkColor string
 var bridgeColor string
 var startColor string
 
+// VisualizeBridge prints the bridge with knots and tailtrack to the stdout.
+// It uses the above specified colors if set.
+func VisualizeBridge(bridge RopeBridge) {
+
+	combined := bridge.TailTrack
+	combined = append(combined, bridge.Knots...)
+	hOff, vOff, maxX, maxY := getDimensions(combined)
+	field := createField(maxX+1, maxY+1)
+
+	for _, pos := range bridge.TailTrack {
+		field[pos.Y+vOff][pos.X+hOff] = '#'
+	}
+	field[bridge.TailTrack[0].Y+vOff][bridge.TailTrack[0].X+hOff] = 's'
+
+	field[vOff][hOff] = 's'
+	for idx := len(bridge.Knots) - 1; idx >= 0; idx-- {
+		pos := bridge.Knots[idx]
+		field[pos.Y+vOff][pos.X+hOff] = strconv.Itoa(idx)[0]
+	}
+	field[bridge.Knots[0].Y+vOff][bridge.Knots[0].X+hOff] = 'H'
+
+	colorPrint(field)
+}
+
 // VisualizeTailTracks prints out the field containing the tailtrack points to stdout.
 // It uses the above specified colors if set.
 func VisualizeTailTracks(tracks []Position) {
@@ -27,9 +51,9 @@ func VisualizeTailTracks(tracks []Position) {
 	colorPrint(field)
 }
 
-// VisualizeBridge prints out the field containing the bridge's knots to stdout.
+// VisualizeKnots prints out the field containing the bridge's knots to stdout.
 // It uses the above specified colors if set.
-func VisualizeBridge(knots []Position) {
+func VisualizeKnots(knots []Position) {
 
 	offX, offY, maxX, maxY := getDimensions(knots)
 	field := createField(maxX+1, maxY+1)
