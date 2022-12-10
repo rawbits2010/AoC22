@@ -18,4 +18,5 @@
 *.txt
 # except for the template
 !cmd/template/input.txt
+!cmd/template/debug.txt
 !cmd/template/session.txt
