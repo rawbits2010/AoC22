@@ -13,43 +13,92 @@ func main() {
 
 	lines := inputhandler.ReadInput()
 
-	var result int
-	result, err := runCode(lines)
+	// Part 1
+	part1ProbeCycles := []int{20, 60, 100, 140, 180, 220}
+	part1Probe := NewSignalStrengthProbe(part1ProbeCycles)
+
+	err := runCode(lines, part1Probe)
 	if err != nil && !errors.Is(err, ErrorEndOfProgram) {
 		fmt.Printf("Error while running part 1 the code: %v", err)
 		os.Exit(int(inputhandler.ErrorCodeProcessing))
 	}
 
-	fmt.Printf("Result: %d", result)
+	fmt.Printf("Result - Part1: %d", part1Probe.sumSignalStrength)
 }
 
-func runCode(lines []string) (int, error) {
+func runCode(program []string, probe SignalProber) error {
 
-	// build the PC :)
-	databus := NewDataBus(lines)
-	cpu := *NewCPU(databus)
+	// build the PC :) - here, for simplicity
+	databus := NewDataBus(program)
+	cpu := NewCPU(databus)
 
-	var sumSignalStrength int
-	var cyclesOfInterest = []int{20, 60, 100, 140, 180, 220}
+	probe.attachProbe(cpu)
 
 	var currCycle int
 	for {
 		currCycle++
 
-		// signal probe
-		for _, cycle := range cyclesOfInterest {
-			if currCycle == cycle {
-				currSignalStrength := currCycle * cpu.RegX
-				sumSignalStrength += currSignalStrength
-				fmt.Printf("cycle: %d, regX: %d, signal: %d - sum: %d\n", currCycle, cpu.RegX, currSignalStrength, sumSignalStrength)
-			}
+		if probe.needsProbing(currCycle) {
+			probe.probe(currCycle)
 		}
 
 		if err := cpu.tick(); err != nil {
-			return sumSignalStrength, fmt.Errorf("CPU exception: %w", err)
+			return fmt.Errorf("CPU exception: %w", err)
 		}
 
 	}
+}
+
+//-----------------------------------------------------------------------------
+
+// SignalStrengthProbe is the probe for Part 1
+type SignalStrengthProbe struct {
+	SignalProbe
+
+	sumSignalStrength int
+}
+
+func NewSignalStrengthProbe(probingCycles []int) *SignalStrengthProbe {
+	return &SignalStrengthProbe{
+		SignalProbe: *NewSignalProbe(probingCycles),
+	}
+}
+
+func (ssp *SignalStrengthProbe) probe(cycle int) {
+	ssp.sumSignalStrength += cycle * ssp.cpu.RegX
+}
+
+// SignalProber is the interface for a probe
+type SignalProber interface {
+	attachProbe(cpu *CPU)
+	needsProbing(cycle int) bool
+	probe(cycle int)
+}
+
+// SignalProbe is a base for an actual signal probing function
+type SignalProbe struct {
+	cpu *CPU
+
+	probingCycles []int
+}
+
+func NewSignalProbe(probingCycles []int) *SignalProbe {
+	return &SignalProbe{
+		probingCycles: probingCycles,
+	}
+}
+
+func (sp *SignalProbe) attachProbe(cpu *CPU) {
+	sp.cpu = cpu
+}
+
+func (sp *SignalProbe) needsProbing(cycle int) bool {
+	for _, neededCycle := range sp.probingCycles {
+		if cycle == neededCycle {
+			return true
+		}
+	}
+	return false
 }
 
 //-----------------------------------------------------------------------------
@@ -63,15 +112,17 @@ func NewDataBus(lines []string) *DataBus {
 }
 
 func (db *DataBus) requestInstruction(index int) (string, error) {
-	if index >= len(db.code) {
+	if index > len(db.code) || index < 0 {
 		return "", fmt.Errorf("out of range")
+	} else if index == len(db.code) { // for simplicity
+		return "", ErrorEndOfProgram
 	}
 	return db.code[index], nil
 }
 
-//-----------------------------------------------------------------------------
-
 var ErrorEndOfProgram = fmt.Errorf("end of program")
+
+//-----------------------------------------------------------------------------
 
 type CPU struct {
 	RegX           int
@@ -100,7 +151,7 @@ func (cpu *CPU) tick() error {
 
 		line, err := cpu.databus.requestInstruction(cpu.ProgramCounter)
 		if err != nil {
-			return ErrorEndOfProgram // for simplicity
+			return fmt.Errorf("error requesting instruction: %w", err)
 		}
 
 		tokens := strings.Split(line, " ")
