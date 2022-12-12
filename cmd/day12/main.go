@@ -96,17 +96,40 @@ func main() {
 	mapColor = outputhandler.GetReset()
 
 	lines := inputhandler.ReadInput()
-
 	playField, start, goal := parseInput(lines)
-	steps, found := pathFind(start, goal, *playField)
+
+	// Part 1
+	stepsPart1, found := pathFind(start, goal, *playField)
 	if !found {
 		panic("no solution")
 	}
-	ReverseSlice(steps)
+	//ReverseSlice(stepsPart1)
+	//visualizePath(stepsPart1, *playField)
 
-	visualizePath(steps, *playField)
+	// Part 2
+	stepsListPart2 := make([]int, 0)
+	for vIdx, heightMapLine := range playField.heightMap {
+		for hIdx, height := range heightMapLine {
 
-	fmt.Printf("Result: %d", len(steps))
+			if height != int('a') {
+				continue
+			}
+
+			steps, found := pathFind(Location{x: hIdx, y: vIdx}, Location{x: goal.x, y: goal.y}, *playField)
+			if !found {
+				//panic("no solution")
+				continue
+			}
+
+			//ReverseSlice(steps)
+			//visualizePath(steps, *playField)
+
+			stepsListPart2 = append(stepsListPart2, len(steps))
+		}
+	}
+	sort.Ints(stepsListPart2)
+
+	fmt.Printf("Result - Part1: %d, Part2: %d", len(stepsPart1), stepsListPart2[0])
 }
 
 func parseInput(lines []string) (*PlayField, Location, Location) {
@@ -222,10 +245,13 @@ func pathFind(unitLocation, targetLocation Location, playfield PlayField) ([]Loc
 				curr = &tilesToCheck[len(tilesToCheck)-1]
 			}
 
-			curr.aStarVals.g = calcDistance(unitLocation, tilesAround[idx])
-			curr.aStarVals.h = calcDistance(targetLocation, tilesAround[idx])
+			tg := currentTile.aStarVals.g + calcDistance(currentTile, tilesAround[idx])
+			if tg > tilesAround[idx].aStarVals.g {
+				curr.aStarVals.g = tg
+				curr.aStarVals.h = calcDistance(targetLocation, tilesAround[idx])
 
-			curr.aStarVals.prev = &currentTile
+				curr.aStarVals.prev = &currentTile
+			}
 
 		}
 
@@ -276,7 +302,9 @@ func getTilesAround(location Location, playfield PlayField) []Location {
 }
 
 func calcDistance(unitLocation Location, targetLocation Location) float64 {
-	return math.Abs(float64(unitLocation.x-targetLocation.x)) + math.Abs(float64(unitLocation.y-targetLocation.y))
+	dX := unitLocation.x - targetLocation.x
+	dY := unitLocation.y - targetLocation.y
+	return math.Sqrt(float64(dX*dX + dY*dY))
 }
 
 //-Utils-----------------------------------------------------------------------
