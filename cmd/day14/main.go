@@ -20,11 +20,23 @@ func main() {
 	}
 
 	caveSlice := NewCaveSlice(dimensions, rockPaths)
-	caveSlice.Simulate(500 - dimensions.MinX)
 
-	restedSandCount := caveSlice.countRested()
+	err = caveSlice.Simulate(500, true)
+	if err != nil {
+		fmt.Printf("Error in part 1 simulation: %v", err)
+		os.Exit(int(inputhandler.ErrorCodeProcessing))
+	}
+	restedSandCountPart1 := caveSlice.countRested()
 
-	fmt.Printf("Result - Part1: %d", restedSandCount)
+	caveSlice.ClearSand()
+	err = caveSlice.Simulate(500, false)
+	if err != nil {
+		fmt.Printf("Error in part 1 simulation: %v", err)
+		os.Exit(int(inputhandler.ErrorCodeProcessing))
+	}
+	restedSandCountPart2 := caveSlice.countRested()
+
+	fmt.Printf("Result - Part1: %d, Part2: %d", restedSandCountPart1, restedSandCountPart2)
 }
 
 //-----------------------------------------------------------------------------
@@ -103,18 +115,25 @@ const (
 )
 
 type CaveSlice struct {
-	Field      [][]CellType
-	Dimensions Dimensions
+	Field       [][]CellType
+	Dimensions  Dimensions
+	PointOffset Position
 }
 
 func NewCaveSlice(dimensions Dimensions, rockPaths [][]Position) *CaveSlice {
 
 	caveSlice := CaveSlice{}
 
+	// for infinite simulation:
+	// width is raised by 1 on each side
+	// height is raised by 1 at the bottom
 	caveSlice.Dimensions.MinX = 0
-	caveSlice.Dimensions.MaxX = dimensions.MaxX - dimensions.MinX
+	caveSlice.Dimensions.MaxX = (dimensions.MaxX - dimensions.MinX) + 2
 	caveSlice.Dimensions.MinY = 0
-	caveSlice.Dimensions.MaxY = dimensions.MaxY // leave Y so there is space for simulation
+	caveSlice.Dimensions.MaxY = dimensions.MaxY + 1
+
+	caveSlice.PointOffset.X = -dimensions.MinX + 1
+	caveSlice.PointOffset.Y = 0
 
 	caveSlice.Field = make([][]CellType, caveSlice.Dimensions.MaxY+1)
 	for vIdx := range caveSlice.Field {
@@ -129,7 +148,7 @@ func NewCaveSlice(dimensions Dimensions, rockPaths [][]Position) *CaveSlice {
 		for pathIdx := 0; pathIdx < len(rockPath)-1; pathIdx++ {
 
 			startX, startY, endX, endY := GetMinMax(rockPath[pathIdx], rockPath[pathIdx+1])
-			for x := startX - dimensions.MinX; x <= endX-dimensions.MinX; x++ {
+			for x := startX + caveSlice.PointOffset.X; x <= endX+caveSlice.PointOffset.X; x++ {
 				for y := startY; y <= endY; y++ {
 
 					caveSlice.Field[y][x] = Rock
@@ -141,17 +160,67 @@ func NewCaveSlice(dimensions Dimensions, rockPaths [][]Position) *CaveSlice {
 	return &caveSlice
 }
 
-func (cs *CaveSlice) Simulate(dropInPos int) {
+func (cs *CaveSlice) Simulate(dropInPos int, finite bool) error {
+
+	dropInPos += cs.PointOffset.X
 
 	var iterCount int
+	var simDone bool
 	for {
 		iterCount++
 
 		// seed
 		cs.Field[0][dropInPos] = SandMoving
 
-		simDone := cs.doAnIteration()
-		//visualize(cs)
+		if finite {
+			oobState := cs.doIteration()
+
+			switch oobState {
+			case OOBBottom:
+				simDone = true
+			case OOBNone:
+				// everything is fine
+			default:
+				return fmt.Errorf("imposible out-of-bounds on the '%s'", oobState)
+			}
+
+			//visualize(cs)
+		} else {
+			oobState := cs.doIteration()
+
+			switch oobState {
+
+			case OOBBottom:
+				for cellIdx := range cs.Field[cs.Dimensions.MaxY] {
+					if cs.Field[cs.Dimensions.MaxY][cellIdx] == SandMoving {
+						cs.Field[cs.Dimensions.MaxY][cellIdx] = SandStatic
+						break
+					}
+				}
+
+			case OOBLeft:
+				for vIdx := cs.Dimensions.MaxY; vIdx >= 0; vIdx-- {
+					if cs.Field[vIdx][cs.Dimensions.MinX] == SandMoving {
+						cs.Field[vIdx][cs.Dimensions.MinX] = SandStatic
+						break
+					}
+				}
+
+			case OOBRight:
+				for vIdx := cs.Dimensions.MaxY; vIdx >= 0; vIdx-- {
+					if cs.Field[vIdx][cs.Dimensions.MaxX] == SandMoving {
+						cs.Field[vIdx][cs.Dimensions.MaxX] = SandStatic
+						break
+					}
+				}
+			}
+
+			if cs.Field[0][dropInPos] == SandStatic {
+				simDone = true
+			}
+
+			//visualize(cs)
+		}
 
 		if simDone /*|| iterCount == 15*/ {
 			break
@@ -159,12 +228,23 @@ func (cs *CaveSlice) Simulate(dropInPos int) {
 	}
 
 	visualize(cs)
+
+	return nil
 }
 
-// returns true when simulation done (sand fall out to the void)
-func (cs *CaveSlice) doAnIteration() bool {
+type OutOfBoundsDirection string
 
-	simDone := false
+const (
+	OOBLeft   OutOfBoundsDirection = "Left"
+	OOBRight  OutOfBoundsDirection = "Right"
+	OOBBottom OutOfBoundsDirection = "Bottom"
+	OOBNone   OutOfBoundsDirection = "None"
+)
+
+// returns true when simulation done (sand fall to the abyss)
+func (cs *CaveSlice) doIteration() OutOfBoundsDirection {
+
+	simDone := OOBNone
 	for vIdx := cs.Dimensions.MaxY; vIdx >= cs.Dimensions.MinY; vIdx-- {
 		for hIdx := cs.Dimensions.MinX; hIdx <= cs.Dimensions.MaxX; hIdx++ {
 
@@ -174,7 +254,7 @@ func (cs *CaveSlice) doAnIteration() bool {
 
 				// check bottom
 				if vIdx+1 > cs.Dimensions.MaxY {
-					simDone = true
+					simDone = OOBBottom
 					continue
 				}
 				if cs.Field[vIdx+1][hIdx] == Air {
@@ -183,22 +263,24 @@ func (cs *CaveSlice) doAnIteration() bool {
 				}
 
 				// bottom left
-				if hIdx-1 < cs.Dimensions.MinX {
-					simDone = true
-					continue
-				}
-				if cs.Field[vIdx+1][hIdx-1] == Air {
+				if hIdx-1 >= cs.Dimensions.MinX && cs.Field[vIdx+1][hIdx-1] == Air {
 					cs.Field[vIdx+1][hIdx-1] = SandMoving
 					continue
 				}
 
 				// bottom right
-				if hIdx+1 > cs.Dimensions.MaxX {
-					simDone = true
+				if hIdx+1 <= cs.Dimensions.MaxX && cs.Field[vIdx+1][hIdx+1] == Air {
+					cs.Field[vIdx+1][hIdx+1] = SandMoving
 					continue
 				}
-				if cs.Field[vIdx+1][hIdx+1] == Air {
-					cs.Field[vIdx+1][hIdx+1] = SandMoving
+
+				// Out-of-bounds on the sides
+				if hIdx+1 > cs.Dimensions.MaxX {
+					simDone = OOBRight
+					continue
+				}
+				if hIdx-1 < cs.Dimensions.MinX {
+					simDone = OOBLeft
 					continue
 				}
 
@@ -223,8 +305,44 @@ func (cs *CaveSlice) countRested() int {
 		}
 	}
 
+	// extrapolated left side
+	var sandHeightLeft int
+	for vIdx := cs.Dimensions.MaxY; vIdx >= 0; vIdx-- {
+		if cs.Field[vIdx][cs.Dimensions.MinX] != SandStatic {
+			sandHeightLeft = cs.Dimensions.MaxY - vIdx
+			break
+		}
+	}
+
+	counter += GetGaussSum(sandHeightLeft - 1)
+
+	// extrapolated right side
+	var sandHeightRight int
+	for vIdx := cs.Dimensions.MaxY; vIdx >= 0; vIdx-- {
+		if cs.Field[vIdx][cs.Dimensions.MaxX] != SandStatic {
+			sandHeightRight = cs.Dimensions.MaxY - vIdx
+			break
+		}
+	}
+
+	counter += GetGaussSum(sandHeightRight - 1)
+
 	return counter
 }
+
+func (cs *CaveSlice) ClearSand() {
+
+	for vIdx := range cs.Field {
+		for hIdx := range cs.Field[vIdx] {
+
+			if cs.Field[vIdx][hIdx] == SandMoving || cs.Field[vIdx][hIdx] == SandStatic {
+				cs.Field[vIdx][hIdx] = Air
+			}
+		}
+	}
+}
+
+//-----------------------------------------------------------------------------
 
 // returns smallerXY, biggerXY
 func GetMinMax(val1 Position, val2 Position) (int, int, int, int) {
@@ -248,6 +366,10 @@ func GetMinMax(val1 Position, val2 Position) (int, int, int, int) {
 	}
 
 	return minX, minY, maxX, maxY
+}
+
+func GetGaussSum(val int) int {
+	return int((float64(val) / 2) * float64(1+val))
 }
 
 //-----------------------------------------------------------------------------
