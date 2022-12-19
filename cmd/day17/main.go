@@ -3,6 +3,8 @@ package main
 import (
 	"AoC22/internal/inputhandler"
 	"fmt"
+	"math"
+	"strconv"
 )
 
 // Shapes
@@ -58,8 +60,6 @@ const (
 	shapeStartHGap = +2
 )
 
-const maxShapesFallen = 1000000000000 //2022
-
 //-----------------------------------------------------------------------------
 
 func main() {
@@ -67,10 +67,12 @@ func main() {
 	lines := inputhandler.ReadInput()
 	jets := lines[0]
 	chamber := *NewVerticalChamber()
+	highestPointPart1 := letTheBlocksFall(jets, ShapeList, chamber, 2022, true)
 
-	result := letTheBlocksFall(jets, ShapeList, chamber)
+	chamber = *NewVerticalChamber()
+	highestPointPart2 := letTheBlocksFall(jets, ShapeList, chamber, 1000000000000, true)
 
-	fmt.Printf("Result: %d", result)
+	fmt.Printf("Result - Part1: %d, Part2: %d", highestPointPart1, highestPointPart2)
 }
 
 //-----------------------------------------------------------------------------
@@ -335,14 +337,51 @@ func (vch *VerticalChamber) convertVIdxToIdx(vIdx int) int {
 	return (vch.Height - 1) - vIdx
 }
 
+//-Part 2 extensions-----------------------------------------------------------
+
+func (vch *VerticalChamber) GetFreeHeightMap() []int {
+
+	heightMap := make([]int, 7)
+	for idx := range heightMap {
+		heightMap[idx] = math.MaxInt
+	}
+
+	highestBlockIdx := vch.convertVPosToIdx(vch.FindHighestBlock())
+	for hIdx := 0; hIdx < vch.Width; hIdx++ {
+		for vIdx := highestBlockIdx; vIdx < vch.Height; vIdx++ {
+			if vch.Field[vIdx][hIdx] == byte(StaticBlock) {
+				heightMap[hIdx] = vIdx - highestBlockIdx
+				break
+			}
+		}
+	}
+
+	return heightMap
+}
+
+type Hash struct {
+	heightMap    string
+	nextShapeIdx int
+	nextJetIdx   int
+}
+
+type State struct {
+	shapesFallen int
+	highestPoint int
+}
+
 //-----------------------------------------------------------------------------
 
-func letTheBlocksFall(jets string, shapeList []Shape, chamber VerticalChamber) int {
+func letTheBlocksFall(jets string, shapeList []Shape, chamber VerticalChamber, maxShapesToFall int, withPatternDetection bool) int {
 
 	highestPoint := 0
 
 	currShapeIdx := 0
 	currJetIdx := 0
+
+	chamberState := make(map[Hash]State) // fallen shape count
+	var shapesFallenOffset int = 0
+	var highestPointOffset int = 0
 
 	shapesFallen := 0
 	haveFallingRock := false
@@ -355,8 +394,37 @@ func letTheBlocksFall(jets string, shapeList []Shape, chamber VerticalChamber) i
 			highestPoint = chamber.FindHighestBlock()
 
 			// reached the limit
-			if shapesFallen == maxShapesFallen {
+			if shapesFallen+shapesFallenOffset == maxShapesToFall {
 				break
+			}
+
+			// Part 2
+			if withPatternDetection {
+
+				var heightMap string
+				for _, height := range chamber.GetFreeHeightMap() {
+					heightMap += strconv.Itoa(height) + ","
+				}
+				hash := Hash{
+					heightMap:    heightMap,
+					nextShapeIdx: currShapeIdx,
+					nextJetIdx:   currJetIdx,
+				}
+
+				state, ok := chamberState[hash]
+				if ok { // found the pattern
+
+					// fast forward
+					periodShapeCount := shapesFallen - state.shapesFallen
+					skippingPeriods := (maxShapesToFall - shapesFallen) / periodShapeCount
+					shapesFallenOffset = skippingPeriods * periodShapeCount
+					periodHighestPoint := highestPoint - state.highestPoint
+					highestPointOffset = skippingPeriods * periodHighestPoint
+
+					withPatternDetection = false // done with this
+				} else {
+					chamberState[hash] = State{shapesFallen: shapesFallen, highestPoint: highestPoint}
+				}
 			}
 
 			// extend chamber sim area if needed
@@ -399,24 +467,25 @@ func letTheBlocksFall(jets string, shapeList []Shape, chamber VerticalChamber) i
 			chamber.Solidify()
 			haveFallingRock = false
 			shapesFallen++
-			fmt.Printf("%.2f%%\n", float64(shapesFallen)/float64(maxShapesFallen)*100)
+			fmt.Printf("%.2f%%\n", float64(shapesFallen+shapesFallenOffset)/float64(maxShapesToFall)*100)
 
 			currShapeIdx = (currShapeIdx + 1) % len(ShapeList)
 		}
 		//visualize(chamber.Field, shapesFallen)
 	}
 
-	return highestPoint
+	//visualize(chamber.Field, shapesFallen)
+	return highestPoint + highestPointOffset
 }
 
 func visualize(lines [][]byte, blockNum int) {
-
-	if blockNum != maxShapesFallen-1 {
-		return
-	}
-
-	for _, line := range lines {
-		fmt.Println(string(line))
+	/*
+		if blockNum != maxShapesFallen-1 {
+			return
+		}
+	*/
+	for lineIdx, line := range lines {
+		fmt.Println(string(line), len(lines)-lineIdx)
 	}
 	fmt.Println()
 }
