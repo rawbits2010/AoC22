@@ -12,6 +12,16 @@ type Coord struct {
 	Idx   int
 }
 
+func MulInt(val1, val2 int) int {
+	res := val1 * val2
+	if (res < 0) == ((val1 < 0) != (val2 < 0)) {
+		if res/val2 == val1 {
+			return res
+		}
+	}
+	panic("multiplication overflow")
+}
+
 func main() {
 
 	lines := inputhandler.ReadInput()
@@ -22,16 +32,39 @@ func main() {
 		os.Exit(int(inputhandler.ErrorCodeProcessing))
 	}
 
-	mixedCoords := mix(coordList)
+	// Part 1
+
+	mixedCoords := mix(append([]Coord{}, coordList...))
+
 	zeroIdx, found := getIdxOf(0, mixedCoords)
 	if !found {
 		fmt.Printf("Error: couldn't find starting index '0' in '%v'\n", mixedCoords)
 		os.Exit(int(inputhandler.ErrorCodeProcessing))
 	}
 
-	result := sumCoords([]int{1000, 2000, 3000}, zeroIdx, mixedCoords)
+	resultPart1 := sumCoords([]int{1000, 2000, 3000}, zeroIdx, mixedCoords)
 
-	fmt.Printf("Result: %d", result)
+	// Part 2
+
+	moddedCoordList := make([]Coord, len(coordList))
+	for coordIdx, coord := range coordList {
+		moddedCoordList[coordIdx] = Coord{Value: MulInt(coord.Value, 811589153), Idx: coord.Idx}
+	}
+
+	mixedCoords = moddedCoordList
+	for idx := 0; idx < 10; idx++ {
+		mixedCoords = mix(mixedCoords)
+	}
+
+	zeroIdx, found = getIdxOf(0, mixedCoords)
+	if !found {
+		fmt.Printf("Error: couldn't find starting index '0' in '%v'\n", mixedCoords)
+		os.Exit(int(inputhandler.ErrorCodeProcessing))
+	}
+
+	resultPart2 := sumCoords([]int{1000, 2000, 3000}, zeroIdx, mixedCoords)
+
+	fmt.Printf("Result - Part1: %d, Part2: %d", resultPart1, resultPart2)
 }
 
 //-----------------------------------------------------------------------------
@@ -62,7 +95,10 @@ func sumCoords(posList []int, zeroIdx int, mixedCoords []Coord) int {
 
 	var result int
 	for _, pos := range posList {
-		result += mixedCoords[(pos+zeroIdx)%len(mixedCoords)].Value
+		cordAtPos := mixedCoords[(pos+zeroIdx)%len(mixedCoords)].Value
+		//fmt.Printf("%dth - %d\n", pos, cordAtPos)
+
+		result += cordAtPos
 	}
 
 	return result
@@ -72,7 +108,7 @@ func mix(coords []Coord) []Coord {
 
 	for currCoordIdx := 0; currCoordIdx < len(coords); currCoordIdx++ {
 
-		newCoords := make([]Coord, 0)
+		var newCoords []Coord
 		for idx, coord := range coords {
 			if coord.Idx != currCoordIdx {
 				continue
@@ -89,7 +125,7 @@ func mix(coords []Coord) []Coord {
 				moveToIdx = idx
 			}
 
-			newCoords = append(newCoords, ringCoords[:moveToIdx]...)
+			newCoords = append([]Coord{}, ringCoords[:moveToIdx]...)
 			newCoords = append(newCoords, coord)
 			newCoords = append(newCoords, ringCoords[moveToIdx:]...)
 
@@ -97,7 +133,7 @@ func mix(coords []Coord) []Coord {
 			break
 		}
 
-		coords = newCoords[:]
+		coords = newCoords
 	}
 
 	return coords
